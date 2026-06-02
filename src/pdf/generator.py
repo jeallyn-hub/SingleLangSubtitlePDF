@@ -15,12 +15,21 @@ class SingleLangPDF(FPDF):
         """设置字体 - 支持英语、日语和中文"""
         self.chinese_font_available = False
         self.japanese_font_available = False
+        self.simsun_font_available = False
         
         font_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'simhei.ttf')
         if os.path.exists(font_path):
             try:
                 self.add_font('SimHei', '', font_path)
                 self.chinese_font_available = True
+            except Exception:
+                pass
+        
+        font_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'simsun.ttc')
+        if os.path.exists(font_path):
+            try:
+                self.add_font('SimSun', '', font_path)
+                self.simsun_font_available = True
             except Exception:
                 pass
         
@@ -34,10 +43,24 @@ class SingleLangPDF(FPDF):
     
     def _set_font(self, size=FONT_SIZE_NORMAL, style=''):
         """统一设置字体"""
-        if self.language == 'japanese' and self.japanese_font_available:
-            self.set_font('MS Gothic', '', size)
-        elif self.chinese_font_available:
-            self.set_font('SimHei', '', size)
+        # 对于中日混合文本，优先使用支持中日双语的字体
+        # SimSun (宋体) 支持中日汉字，是更好的选择
+        if self.language == 'japanese':
+            if self.simsun_font_available:
+                self.set_font('SimSun', '', size)
+            elif self.chinese_font_available:
+                self.set_font('SimHei', '', size)
+            elif self.japanese_font_available:
+                self.set_font('MS Gothic', '', size)
+            else:
+                self.set_font(PDF_FONT, style, size)
+        elif self.language == 'chinese':
+            if self.chinese_font_available:
+                self.set_font('SimHei', '', size)
+            elif self.simsun_font_available:
+                self.set_font('SimSun', '', size)
+            else:
+                self.set_font(PDF_FONT, style, size)
         else:
             self.set_font(PDF_FONT, style, size)
     

@@ -70,6 +70,10 @@ def clean_text(text):
     # 移除多余的空格和换行
     text = re.sub(r'\s+', ' ', text).strip()
     
+    # 检查是否只剩符号（如 ■、●、◆ 等）
+    if text and re.match(r'^[\s■●◆▲△▼▽★☆♦♠♥♣◇◈]*$', text):
+        return ""
+    
     return text
 
 def parse_srt_to_text(srt_content):
@@ -114,16 +118,46 @@ def parse_ass_to_text(ass_content):
             break
         
         if in_events_section and line.startswith('Dialogue:'):
-            parts = line.split(',', 9)
+            # 移除 Dialogue: 前缀
+            content = line[9:].strip()
+            
+            # 尝试标准ASS格式：逗号分隔
+            parts = content.split(',', 9)
             if len(parts) >= 10:
-                text = re.sub(r'{[^}]*}', '', parts[9]).strip()
-                # 将ASS换行符 \N 替换为空格（处理双语字幕）
-                text = text.replace(r'\N', ' ').replace(r'\n', '\n').replace(r'\h', '').replace(r'\t', '\t')
+                text = parts[9].strip()
+            else:
+                # 非标准格式：时间码后可能用*或其他符号分隔
+                # 格式可能是: Dialogue: 00:02:23.290:02:25.60*DefaultNTP000000000000文本内容
+                # 或者: Dialogue: 00:02:23.29,02:25.60,Default,NTP,0000,0000,0000,0,0,文本内容
                 
-                if text:
-                    if is_metadata_line(text):
-                        continue
-                    result.append(text)
+                # 查找第一个时间码结束的位置（时间码格式类似 00:02:23.290:02:25.60）
+                # 时间码后可能跟着 *, 逗号, 或直接是文本
+                timecode_pattern = r'^\d{2}:\d{2}:\d{2}(?:\.\d+)?[:-]\d{2}:\d{2}:\d{2}(?:\.\d+)?'
+                match = re.match(timecode_pattern, content)
+                if match:
+                    # 跳过时间码部分
+                    remaining = content[match.end():]
+                    # 跳过后面的样式信息（通常以*或逗号开头）
+                    # 查找第一个{或直接是文本的位置
+                    text_start = 0
+                    for i, char in enumerate(remaining):
+                        if char.isalnum() or char == '{' or char == '(':
+                            text_start = i
+                            break
+                    text = remaining[text_start:].strip()
+                else:
+                    # 如果无法识别格式，直接尝试提取{}外的内容
+                    text = content
+            
+            # 移除ASS样式标签 {xxx}
+            text = re.sub(r'\{[^{}]*\}', '', text).strip()
+            # 将ASS换行符 \N 替换为空格（处理双语字幕）
+            text = text.replace(r'\N', ' ').replace(r'\n', '\n').replace(r'\h', '').replace(r'\t', '\t')
+            
+            if text:
+                if is_metadata_line(text):
+                    continue
+                result.append(text)
     
     return '\n'.join(result)
 
